@@ -511,9 +511,10 @@ describe('seed freshness workflow control plane', () => {
     assert.equal(checkout.uses, 'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10');
     assert.equal(checkout.with?.['fetch-depth'], 0);
     assert.equal(checkout.with?.filter, 'blob:none');
-    // This checkout IS the comparison head: check-railway-deploy-drift.mjs resolves
-    // it with `git rev-parse HEAD`. Pinning `ref:` to anything else grades a stale
-    // tree, which reports a clean fleet while main sits undeployed.
+    // This checkout IS the comparison head. The drift script's local default is
+    // origin/main, so this workflow must pass its immutable trigger HEAD explicitly.
+    // Pinning `ref:` to anything else grades a stale tree, which reports a clean
+    // fleet while main sits undeployed.
     assert.equal(
       checkout.with?.ref,
       undefined,
@@ -541,7 +542,11 @@ describe('seed freshness workflow control plane', () => {
     const drift = stepNamed('Check Railway deploy drift against main', driftSteps);
     assert.equal(drift.env.RAILWAY_TOKEN, '${{ secrets.RAILWAY_PRODUCTION_TOKEN }}');
     assert.equal(drift.env.RAILWAY_PROJECT_ID, '${{ vars.RAILWAY_PROJECT_ID }}');
-    assert.match(drift.run, /node scripts\/check-railway-deploy-drift\.mjs/);
+    assert.match(
+      drift.run,
+      /node scripts\/check-railway-deploy-drift\.mjs --head "\$\(git rev-parse HEAD\)"/,
+      'the scheduled monitor must preserve trigger HEAD while local runs default to origin/main',
+    );
     assert.match(
       drift.run,
       /git fetch --quiet origin main/,

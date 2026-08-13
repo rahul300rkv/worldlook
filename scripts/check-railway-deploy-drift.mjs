@@ -292,10 +292,21 @@ export function classifyServiceDeploy({
   const forHead = (statuses) => ordered.find((deployment) => statuses.includes(deployment.status)
     && deployment.meta?.commitHash === headSha);
   const failedForHead = forHead(FAILED_STATUSES);
+  // A stale comparison head can still have a failed Railway build after a
+  // newer descendant is already serving. Production is ahead in that case;
+  // the failed record is not evidence that the serving source is stale.
+  // Compute this before the failure fast-path, but keep rejection handling
+  // ahead of AHEAD below: a later refused push can still be actionable even
+  // when the currently-running source descends from the comparison head.
+  const runningIsAhead = Boolean(
+    runningSha
+    && runningSha !== headSha
+    && isAncestor(headSha, runningSha),
+  );
   const newestRejectionAt = outstandingRejections.length > 0
     ? Math.max(...outstandingRejections.map(createdAtMs))
     : Number.NEGATIVE_INFINITY;
-  if (failedForHead && createdAtMs(failedForHead) > newestRejectionAt) {
+  if (!runningIsAhead && failedForHead && createdAtMs(failedForHead) > newestRejectionAt) {
     return {
       ...identified,
       verdict: 'BUILD_FAILED',
@@ -344,7 +355,7 @@ export function classifyServiceDeploy({
   if (identified.runningSha === headSha) {
     return { ...identified, verdict: 'CURRENT', detail: null };
   }
-  if (isAncestor(headSha, identified.runningSha)) {
+  if (runningIsAhead) {
     return {
       ...identified,
       verdict: 'AHEAD',
@@ -757,6 +768,66 @@ export function readRepeatedArguments(argv, name) {
   return values;
 }
 
+export function resolveOriginMainRelation(headSha, originMainSha, ancestry) {
+  if (!originMainSha) return 'unavailable';
+  if (headSha === originMainSha) return 'exact';
+  const forward = ancestry(headSha, originMainSha);
+  if (forward === 'yes') return 'behind';
+  const reverse = ancestry(originMainSha, headSha);
+  if (reverse === 'yes') return 'ahead';
+  return forward === 'no' && reverse === 'no' ? 'diverged' : 'unknown';
+}
+
+/**
+ * Resolve the commit the fleet should be compared with.
+ *
+ * An operator commonly runs this script from a feature worktree, so local
+ * HEAD is not a safe default. The remote-tracking main ref is the repository's
+ * declared production line, matching trigger-railway-deploys.mjs. An explicit
+ * --head remains available to immutable CI/reconcile callers and its relation
+ * to origin/main is returned for the report header.
+ */
+export function resolveComparisonHead(argv, { git, ancestry = () => 'unknown' } = {}) {
+  if (typeof git !== 'function') throw new TypeError('resolveComparisonHead requires a git runner');
+  const requestedHead = readArgument(argv, '--head', null);
+  let originMainSha = null;
+  try {
+    originMainSha = git(['rev-parse', '--verify', '--end-of-options', 'origin/main^{commit}']);
+  } catch (error) {
+    if (!requestedHead) {
+      throw new Error(
+        'cannot resolve origin/main for the deploy-drift comparison; fetch main or pass --head explicitly',
+        { cause: error },
+      );
+    }
+  }
+
+  let headSha = originMainSha;
+  let headSource = 'origin/main';
+  if (requestedHead) {
+    headSource = '--head';
+    try {
+      // Keep a user-provided ref behind rev-parse's option boundary. The
+      // inline form (`--head=--something`) can legitimately reach here, and
+      // without this marker Git could interpret it as a rev-parse option.
+      headSha = git(['rev-parse', '--verify', '--end-of-options', `${requestedHead}^{commit}`]);
+    } catch (error) {
+      throw new Error(`cannot resolve --head ${requestedHead} to a commit`, { cause: error });
+    }
+  }
+
+  return {
+    headSha,
+    headSource,
+    originMainSha,
+    originMainRelation: resolveOriginMainRelation(headSha, originMainSha, ancestry),
+  };
+}
+
+export function formatComparisonHead({ headSource, originMainRelation }) {
+  return `source=${headSource} vs-origin-main=${originMainRelation}`;
+}
+
 const GIT_CALL_TIMEOUT_MS = 30_000;
 
 function runGit(args) {
@@ -768,7 +839,9 @@ function runGit(args) {
   if (result.signal) throw new Error(`git ${args.join(' ')} timed out`);
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`git ${args.join(' ')} failed (${result.status}): ${result.stderr.trim()}`);
+    const error = new Error(`git ${args.join(' ')} failed (${result.status}): ${result.stderr.trim()}`);
+    error.status = result.status;
+    throw error;
   }
   return result.stdout.trim();
 }
@@ -776,8 +849,11 @@ function runGit(args) {
 
 
 
-function printReport(results, summary, headSha, graceSha, { verbose = false } = {}) {
-  console.log(`Railway deploy-drift check: head=${headSha.slice(0, 9)} grace=${graceSha.slice(0, 9)} services=${results.length} ${JSON.stringify(summary.counts)}`);
+function printReport(results, summary, headSha, graceSha, {
+  verbose = false,
+  headContext = { headSource: 'unknown', originMainRelation: 'unknown' },
+} = {}) {
+  console.log(`Railway deploy-drift check: head=${headSha.slice(0, 9)} ${formatComparisonHead(headContext)} grace=${graceSha.slice(0, 9)} services=${results.length} ${JSON.stringify(summary.counts)}`);
 
   // The actionable list goes FIRST. This ordering is deliberately NOT the one
   // check-seed-freshness.mjs uses: that baseline holds 2 entries, this one
@@ -870,7 +946,6 @@ async function main() {
     throw new Error('--strict requires at least one immutable --expected-service');
   }
 
-  const headSha = readArgument(process.argv, '--head', null) ?? runGit(['rev-parse', 'HEAD']);
   // `git merge-base --is-ancestor` exits non-zero both when the answer is no
   // and when the object is missing (a shallow checkout that never fetched the
   // commit). Both collapse to "cannot prove it", which keeps the service
@@ -884,16 +959,12 @@ async function main() {
   // "cannot prove it keeps the service reported" behaviour.
   const ancestry = createAncestryResolver({ git: runGit });
   const isAncestor = (ancestor, descendant) => ancestry(ancestor, descendant) === 'yes';
-  let authorizedMainSha = null;
-  if (strict) {
-    try {
-      authorizedMainSha = runGit(['rev-parse', '--verify', 'origin/main^{commit}']);
-    } catch {
-      // Strict AHEAD acceptance needs a positive repository-lineage proof. A
-      // missing/stale ref is not fatal for exact CURRENT results, but every
-      // AHEAD result will fail closed in summarizeStrictDeployDrift below.
-    }
-  }
+  const headContext = resolveComparisonHead(process.argv, { git: runGit, ancestry });
+  const { headSha } = headContext;
+  // Strict AHEAD acceptance needs a positive repository-lineage proof. An
+  // explicit --head may still work with no remote ref, but every AHEAD result
+  // then fails closed in summarizeStrictDeployDrift below.
+  const authorizedMainSha = strict ? headContext.originMainSha : null;
   // The newest commit that has been available longer than the build grace.
   // On a checkout too shallow to reach back that far, rev-list answers with
   // nothing and this falls back to head — the stricter reading.
@@ -1026,6 +1097,8 @@ async function main() {
     console.log(JSON.stringify({
       environment,
       headSha,
+      headSource: headContext.headSource,
+      originMainRelation: headContext.originMainRelation,
       graceSha,
       deepPass: {
         attempted: deepPass.deepenedServices,
@@ -1040,12 +1113,15 @@ async function main() {
     }, null, 2));
   }
   else if (strict) {
-    console.log(`Strict Railway deploy-drift check: head=${headSha.slice(0, 9)} services=${results.length}`);
+    console.log(`Strict Railway deploy-drift check: head=${headSha.slice(0, 9)} ${formatComparisonHead(headContext)} services=${results.length}`);
     for (const problem of summary.blocking) {
       console.error(`- ${problem.service ?? 'unknown'} [${problem.verdict}] ${problem.detail ?? ''}`);
     }
     for (const service of summary.missing) console.error(`- ${service} [MISSING] was not positively classified`);
-  } else printReport(results, summary, headSha, graceSha, { verbose: process.argv.includes('--verbose') });
+  } else printReport(results, summary, headSha, graceSha, {
+    verbose: process.argv.includes('--verbose'),
+    headContext,
+  });
   if (!summary.ok) process.exitCode = 1;
 }
 

@@ -155,8 +155,9 @@ jobs:
       - name: Start deploy-drift run budget
         run: echo "RAILWAY_DRIFT_JOB_STARTED_AT_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
 
-      # This checkout IS the comparison head: check-railway-deploy-drift.mjs takes
-      # `--head` from `git rev-parse HEAD`, and nothing here passes one.
+      # This checkout IS the comparison head. The script defaults to origin/main
+      # for safe manual worktree runs, so CI passes the immutable trigger HEAD
+      # explicitly while the fetch below supplies newer commits for ancestry.
       #
       # BEHAVIOR CHANGE vs the pre-split step, recorded deliberately. `monitor`
       # detaches onto a gated ancestor when the gate falls back (head ungated, an
@@ -216,4 +217,4 @@ jobs:
           # --depth: passing one to a full clone SHALLOWS it, which would strand
           # exactly the running commits the closure comparison needs.
           git fetch --quiet origin main || true
-          node scripts/check-railway-deploy-drift.mjs
+          node scripts/check-railway-deploy-drift.mjs --head "$(git rev-parse HEAD)"

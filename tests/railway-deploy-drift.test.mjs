@@ -21,7 +21,10 @@ import {
   classifyServiceDeploy,
   classifyFleetWithinDeadline,
   deepenNoBuildWindows,
+  formatComparisonHead,
   resolveDeepPassDeadlineAt,
+  resolveComparisonHead,
+  resolveOriginMainRelation,
   isProblemVerdict,
   missingBaselinedServices,
   readRepeatedArguments,
@@ -192,6 +195,18 @@ describe('Railway deploy drift classification', () => {
     // that never fetched the newer commit — must keep the service reported.
     const undecidable = classify(deployments);
     assert.equal(undecidable.verdict, 'BEHIND');
+  });
+
+  it('does not call a stale head build failure when a descendant is already serving', () => {
+    const result = classify([
+      deployment('FAILED', { at: '2026-08-04T05:50:00Z', sha: HEAD }),
+      deployment('SUCCESS', { at: '2026-08-04T05:44:55Z', sha: NEWER }),
+    ], {
+      isAncestor: (ancestor, descendant) => ancestor === HEAD && descendant === NEWER,
+    });
+    assert.equal(result.verdict, 'AHEAD');
+    assert.equal(result.runningSha, NEWER);
+    assert.equal(isProblemVerdict(result.verdict), false);
   });
 
   // Ancestry must not excuse a rejection: the service can be running a
@@ -862,6 +877,47 @@ describe('strict terminal reconciliation drift', () => {
     assert.deepEqual(ordinary.blocking, []);
   });
 
+  it('accepts an explicit-head AHEAD result only when its running commit is on origin/main', () => {
+    const ancestry = (ancestor, descendant) => (
+      (ancestor === PREVIOUS && descendant === HEAD)
+      || (ancestor === NEWER && descendant === HEAD)
+        ? 'yes'
+        : 'no'
+    );
+    const headContext = resolveComparisonHead(['node', 'script', '--head', PREVIOUS], {
+      git: (args) => {
+        if (args.at(-1) === 'origin/main^{commit}') return HEAD;
+        if (args.at(-1) === `${PREVIOUS}^{commit}`) return PREVIOUS;
+        throw new Error(`unexpected git call: ${args.join(' ')}`);
+      },
+      ancestry,
+    });
+    const ahead = classify([
+      deployment('SUCCESS', { at: '2026-08-04T05:44:55Z', sha: NEWER }),
+    ], {
+      headSha: headContext.headSha,
+      isAncestor: (ancestor, descendant) => ancestor === PREVIOUS && descendant === NEWER,
+    });
+    assert.equal(ahead.verdict, 'AHEAD');
+
+    const authorized = summarizeStrictDeployDrift([ahead], ['seed-example'], {
+      isOnAuthorizedMainLineage: (runningSha) => (
+        ancestry(runningSha, headContext.originMainSha) === 'yes'
+      ),
+    });
+    assert.equal(authorized.ok, true);
+
+    const offMain = summarizeStrictDeployDrift([
+      { ...ahead, runningSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    ], ['seed-example'], {
+      isOnAuthorizedMainLineage: (runningSha) => (
+        ancestry(runningSha, headContext.originMainSha) === 'yes'
+      ),
+    });
+    assert.equal(offMain.ok, false);
+    assert.equal(offMain.blocking[0].verdict, 'AHEAD_LINEAGE_UNPROVEN');
+  });
+
   it('rejects pending builds, baselineable problems, duplicates, and omitted services', () => {
     const pending = summarizeStrictDeployDrift([result('a', 'PENDING_BUILD')], ['a']);
     assert.equal(pending.ok, false);
@@ -903,6 +959,110 @@ describe('strict terminal reconciliation drift', () => {
       () => readRepeatedArguments(['node', 'script', '--expected-service', '--json'], '--expected-service'),
       /requires a value/,
     );
+  });
+
+  it('defaults the comparison head to origin/main rather than the worktree HEAD', () => {
+    const calls = [];
+    const result = resolveComparisonHead(['node', 'script'], {
+      git: (args) => {
+        calls.push(args);
+        assert.deepEqual(args, [
+          'rev-parse', '--verify', '--end-of-options', 'origin/main^{commit}',
+        ]);
+        return HEAD;
+      },
+    });
+    assert.deepEqual(calls, [[
+      'rev-parse', '--verify', '--end-of-options', 'origin/main^{commit}',
+    ]]);
+    assert.deepEqual(result, {
+      headSha: HEAD,
+      headSource: 'origin/main',
+      originMainSha: HEAD,
+      originMainRelation: 'exact',
+    });
+  });
+
+  it('reports an explicit stale head as behind origin/main', () => {
+    const result = resolveComparisonHead(['node', 'script', '--head', PREVIOUS], {
+      git: (args) => {
+        const ref = args.at(-1);
+        if (ref === 'origin/main^{commit}') return HEAD;
+        if (ref === `${PREVIOUS}^{commit}`) return PREVIOUS;
+        throw new Error(`unexpected git call: ${args.join(' ')}`);
+      },
+      ancestry: (ancestor, descendant) => (
+        ancestor === PREVIOUS && descendant === HEAD ? 'yes' : 'no'
+      ),
+    });
+    assert.equal(result.headSha, PREVIOUS);
+    assert.equal(result.headSource, '--head');
+    assert.equal(result.originMainRelation, 'behind');
+    assert.equal(formatComparisonHead(result), 'source=--head vs-origin-main=behind');
+  });
+
+  it('fails clearly when the default origin/main ref is unavailable', () => {
+    assert.throws(
+      () => resolveComparisonHead(['node', 'script'], {
+        git: () => { throw new Error('missing ref'); },
+      }),
+      /cannot resolve origin\/main.*fetch main or pass --head/,
+    );
+  });
+
+  it('keeps an explicit head usable when origin/main is unavailable', () => {
+    const result = resolveComparisonHead(['node', 'script', '--head', HEAD], {
+      git: (args) => {
+        if (args.at(-1) === 'origin/main^{commit}') throw new Error('missing ref');
+        if (args.at(-1) === `${HEAD}^{commit}`) return HEAD;
+        throw new Error(`unexpected git call: ${args.join(' ')}`);
+      },
+    });
+    assert.deepEqual(result, {
+      headSha: HEAD,
+      headSource: '--head',
+      originMainSha: null,
+      originMainRelation: 'unavailable',
+    });
+  });
+
+  it('places an inline option-shaped head behind the git option boundary', () => {
+    const calls = [];
+    assert.throws(
+      () => resolveComparisonHead(['node', 'script', '--head=--help'], {
+        git: (args) => {
+          calls.push(args);
+          if (args.at(-1) === 'origin/main^{commit}') return HEAD;
+          throw new Error('not a revision');
+        },
+      }),
+      /cannot resolve --head --help to a commit/,
+    );
+    assert.deepEqual(calls.at(-1), [
+      'rev-parse', '--verify', '--end-of-options', '--help^{commit}',
+    ]);
+  });
+
+  it('distinguishes ahead, diverged, and unresolved head relationships', () => {
+    const lookup = (answers) => (
+      ancestor,
+      descendant,
+    ) => answers[`${ancestor}..${descendant}`] ?? 'unknown';
+    assert.equal(resolveOriginMainRelation(
+      NEWER,
+      HEAD,
+      lookup({ [`${HEAD}..${NEWER}`]: 'yes' }),
+    ), 'ahead');
+    assert.equal(resolveOriginMainRelation(
+      PREVIOUS,
+      HEAD,
+      () => 'no',
+    ), 'diverged');
+    assert.equal(resolveOriginMainRelation(
+      PREVIOUS,
+      HEAD,
+      () => 'unknown',
+    ), 'unknown');
   });
 
   it('fails closed on an empty or malformed expected fleet', () => {
