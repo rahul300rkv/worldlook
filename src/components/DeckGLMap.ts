@@ -6910,9 +6910,9 @@ export class DeckGLMap {
       if (seq === this.aircraftFetchSeq) {
         this.aircraftPositions = [];
         this.onAircraftPositionsUpdate?.([]);
+        this.setLayerReady('flights', false);
         this.render();
       }
-      this.setLayerLoading('flights', false);
     });
   }
 
