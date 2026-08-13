@@ -49,17 +49,28 @@ describe('CMD+K add-disabled-panel discoverability wiring', () => {
     assert.match(searchManagerSrc, /setAvailablePanels\(/, 'SearchManager must publish the available-panels superset');
     // The panel command handler must enable a disabled panel before scrolling.
     // (`action` is parsed into `panelId` + optional `@tab` deep-link suffix.)
-    assert.match(searchManagerSrc, /enablePanel\(panelId\)/, 'panel command handler must enable a disabled panel');
+    assert.match(
+      searchManagerSrc,
+      /enablePanel\(panelId,\s*\{[\s\S]*?trackDetailedAnalytics:/,
+      'panel command handler must enable a disabled panel through the shared callback',
+    );
     assert.match(searchManagerSrc, /scrollToPanel\(panelId\)/, 'panel command handler must still scroll to the panel');
   });
 
   it('App wires the enablePanel callback into SearchManager', () => {
-    assert.match(appSrc, /enablePanel:\s*\(panelId\)\s*=>\s*this\.eventHandlers\.enablePanelById\(panelId\)/);
+    assert.match(
+      appSrc,
+      /enablePanel:\s*\(panelId, options\)\s*=>\s*this\.eventHandlers\.enablePanelById\(panelId,\s*\{[\s\S]*?trackAnalytics:\s*options\?\.trackDetailedAnalytics !== false/,
+    );
   });
 
   it('EventHandler exposes a single enablePanelById used by both undo and search-add', () => {
     const ehSrc = readFileSync(resolve(__dirname, '../src/app/event-handlers.ts'), 'utf-8');
-    assert.match(ehSrc, /enablePanelById\(panelId: string\): boolean/, 'enablePanelById must be the shared enable path');
+    assert.match(
+      ehSrc,
+      /enablePanelById\(panelId: string, options\?: \{ trackAnalytics\?: boolean \}\): boolean/,
+      'enablePanelById must be the shared enable path',
+    );
     // performUndo must delegate to it (no duplicated enable logic).
     assert.match(ehSrc, /performUndo\(\): void \{[\s\S]*?this\.enablePanelById\(panelId\);/);
   });
