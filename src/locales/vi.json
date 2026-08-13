@@ -1665,7 +1665,8 @@
     "breakingNews": {
       "critical": "NGHIÊM TRỌNG",
       "high": "CAO",
-      "dismiss": "Bỏ qua"
+      "dismiss": "Bỏ qua",
+      "alertsRegion": "Breaking news alerts"
     },
     "intelligenceFindings": {
       "breakingAlerts": "Cảnh báo Khẩn cấp",
@@ -3252,7 +3253,8 @@
     "retry": "Thử lại",
     "refresh": "Làm mới",
     "all": "Tất cả",
-    "cancel": "Hủy"
+    "cancel": "Hủy",
+    "dismiss": "Dismiss"
   },
   "preferences": {
     "display": "Hiển thị",

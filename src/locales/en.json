@@ -1809,7 +1809,8 @@
     "breakingNews": {
       "critical": "CRITICAL",
       "high": "HIGH",
-      "dismiss": "Dismiss"
+      "dismiss": "Dismiss",
+      "alertsRegion": "Breaking news alerts"
     },
     "intelligenceFindings": {
       "breakingAlerts": "Breaking Alerts",
@@ -3292,6 +3293,7 @@
     }
   },
   "common": {
+    "dismiss": "Dismiss",
     "loading": "Loading...",
     "error": "Error",
     "noData": "No data available",

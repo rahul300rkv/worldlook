@@ -35,6 +35,11 @@ export class BreakingNewsBanner {
   constructor() {
     this.container = document.createElement('div');
     this.container.className = 'breaking-news-container';
+    // Live region must exist in the tree before alerts are injected, or the
+    // injected content is never announced (same subtlety as PanelTabBar).
+    this.container.setAttribute('role', 'log');
+    this.container.setAttribute('aria-live', 'assertive');
+    this.container.setAttribute('aria-label', t('components.breakingNews.alertsRegion'));
     // Desktop: fixed body-level overlay. Mobile: join the app flex column
     // below the header (same slot as the critical posture banner, which
     // stays above when both are present) so alerts push content down
@@ -59,19 +64,31 @@ export class BreakingNewsBanner {
     window.addEventListener('resize', this.boundOnResize);
 
     this.container.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      const alertEl = target.closest('.breaking-alert') as HTMLElement | null;
-      if (!alertEl) return;
-
-      if (target.closest('.breaking-alert-dismiss')) {
-        const id = alertEl.getAttribute('data-alert-id');
-        if (id) this.dismissAlert(id);
-        return;
-      }
-
-      const panelId = alertEl.getAttribute('data-target-panel');
-      if (panelId) this.scrollToPanel(panelId);
+      this.handleActivation(e.target as HTMLElement);
     });
+    this.container.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const target = e.target as HTMLElement;
+      // The dismiss <button> already synthesizes a click on Enter/Space.
+      if (target.closest('.breaking-alert-dismiss')) return;
+      if (!target.closest('.breaking-alert')) return;
+      e.preventDefault();
+      this.handleActivation(target);
+    });
+  }
+
+  private handleActivation(target: HTMLElement): void {
+    const alertEl = target.closest('.breaking-alert') as HTMLElement | null;
+    if (!alertEl) return;
+
+    if (target.closest('.breaking-alert-dismiss')) {
+      const id = alertEl.getAttribute('data-alert-id');
+      if (id) this.dismissAlert(id);
+      return;
+    }
+
+    const panelId = alertEl.getAttribute('data-target-panel');
+    if (panelId) this.scrollToPanel(panelId);
   }
 
   private initAudio(): void {
@@ -216,6 +233,8 @@ export class BreakingNewsBanner {
     el.className = `breaking-alert severity-${alert.threatLevel}`;
     el.setAttribute('data-alert-id', alert.id);
     el.setAttribute('data-target-panel', this.resolveTargetPanel(alert));
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
     el.style.cursor = 'pointer';
 
     const icon = alert.threatLevel === 'critical' ? '🚨' : '⚠️';
@@ -227,6 +246,7 @@ export class BreakingNewsBanner {
     const iconSpan = document.createElement('span');
     iconSpan.className = 'breaking-alert-icon';
     iconSpan.textContent = icon;
+    iconSpan.setAttribute('aria-hidden', 'true');
 
     const content = document.createElement('div');
     content.className = 'breaking-alert-content';
@@ -249,8 +269,10 @@ export class BreakingNewsBanner {
 
     const dismissBtn = document.createElement('button');
     dismissBtn.className = 'breaking-alert-dismiss';
+    dismissBtn.type = 'button';
     dismissBtn.textContent = '×';
     dismissBtn.title = t('components.breakingNews.dismiss');
+    dismissBtn.setAttribute('aria-label', t('components.breakingNews.dismiss'));
 
     el.appendChild(iconSpan);
     el.appendChild(content);

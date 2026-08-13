@@ -1793,7 +1793,8 @@
     "breakingNews": {
       "critical": "حرج",
       "dismiss": "تجاهل",
-      "high": "مرتفع"
+      "high": "مرتفع",
+      "alertsRegion": "Breaking news alerts"
     },
     "giving": {
       "activityIndex": "مؤشر النشاط",
@@ -3324,7 +3325,8 @@
     "all": "الكل",
     "loadingGiving": "جارٍ تحميل بيانات العطاء العالمي",
     "rateLimitedMarket": "بيانات السوق غير متاحة مؤقتاً (تقييد معدل الطلبات) — ستتم إعادة المحاولة قريباً",
-    "cancel": "إلغاء"
+    "cancel": "إلغاء",
+    "dismiss": "Dismiss"
   },
   "preferences": {
     "display": "العرض",

@@ -1665,7 +1665,8 @@
     "breakingNews": {
       "critical": "КРИТИЧНО",
       "high": "ВИСОКО",
-      "dismiss": "Отхвърли"
+      "dismiss": "Отхвърли",
+      "alertsRegion": "Breaking news alerts"
     },
     "intelligenceFindings": {
       "breakingAlerts": "Последни алерти",
@@ -3252,7 +3253,8 @@
     "retry": "Опитайте отново",
     "refresh": "Обновяване",
     "all": "Всички",
-    "cancel": "Отмяна"
+    "cancel": "Отмяна",
+    "dismiss": "Dismiss"
   },
   "preferences": {
     "display": "Дисплей",

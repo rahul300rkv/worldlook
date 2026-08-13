@@ -1665,7 +1665,8 @@
     "breakingNews": {
       "critical": "วิกฤต",
       "high": "สูง",
-      "dismiss": "ปิด"
+      "dismiss": "ปิด",
+      "alertsRegion": "Breaking news alerts"
     },
     "intelligenceFindings": {
       "breakingAlerts": "การแจ้งเตือนด่วน",
@@ -3252,7 +3253,8 @@
     "retry": "ลองใหม่",
     "refresh": "รีเฟรช",
     "all": "ทั้งหมด",
-    "cancel": "ยกเลิก"
+    "cancel": "ยกเลิก",
+    "dismiss": "Dismiss"
   },
   "preferences": {
     "display": "การแสดงผล",
