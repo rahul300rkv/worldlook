@@ -20,6 +20,10 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const searchModalSrc = readFileSync(resolve(__dirname, '../src/components/SearchModal.ts'), 'utf-8');
 const searchManagerSrc = readFileSync(resolve(__dirname, '../src/app/search-manager.ts'), 'utf-8');
+const searchSelectionSrc = readFileSync(
+  resolve(__dirname, '../src/app/search-selection-dispatcher.ts'),
+  'utf-8',
+);
 const appSrc = readFileSync(resolve(__dirname, '../src/App.ts'), 'utf-8');
 
 describe('CMD+K add-disabled-panel discoverability wiring', () => {
@@ -45,22 +49,46 @@ describe('CMD+K add-disabled-panel discoverability wiring', () => {
     assert.match(searchModalSrc, /command-addable/, 'missing the Add-affordance CSS hook');
   });
 
-  it('SearchManager feeds the available set and enables-then-scrolls on select', () => {
+  it('SearchManager feeds the available set and its dispatcher enables-then-scrolls on select', () => {
     assert.match(searchManagerSrc, /setAvailablePanels\(/, 'SearchManager must publish the available-panels superset');
     // The panel command handler must enable a disabled panel before scrolling.
     // (`action` is parsed into `panelId` + optional `@tab` deep-link suffix.)
-    assert.match(searchManagerSrc, /enablePanel\(panelId\)/, 'panel command handler must enable a disabled panel');
-    assert.match(searchManagerSrc, /scrollToPanel\(panelId\)/, 'panel command handler must still scroll to the panel');
+    assert.match(
+      searchSelectionSrc,
+      /enablePanel\(panelId,\s*\{\s*trackDetailedAnalytics\s*\}\)/,
+      'panel command handler must enable a disabled panel through the shared callback',
+    );
+    assert.match(
+      searchSelectionSrc,
+      /scrollToPanel(?:WhenReady)?\(panelId/,
+      'panel command handler must still scroll to the panel',
+    );
   });
 
   it('App wires the enablePanel callback into SearchManager', () => {
-    assert.match(appSrc, /enablePanel:\s*\(panelId\)\s*=>\s*this\.eventHandlers\.enablePanelById\(panelId\)/);
+    assert.match(
+      appSrc,
+      /enablePanel:\s*\(panelId, options\)\s*=>\s*this\.eventHandlers\.enablePanelById\(panelId,\s*\{[\s\S]*?trackAnalytics:\s*options\?\.trackDetailedAnalytics !== false/,
+    );
   });
 
   it('EventHandler exposes a single enablePanelById used by both undo and search-add', () => {
     const ehSrc = readFileSync(resolve(__dirname, '../src/app/event-handlers.ts'), 'utf-8');
-    assert.match(ehSrc, /enablePanelById\(panelId: string\): boolean/, 'enablePanelById must be the shared enable path');
+    assert.match(
+      ehSrc,
+      /enablePanelById\(panelId: string, options\?: \{ trackAnalytics\?: boolean \}\): boolean/,
+      'enablePanelById must be the shared enable path',
+    );
     // performUndo must delegate to it (no duplicated enable logic).
     assert.match(ehSrc, /performUndo\(\): void \{[\s\S]*?this\.enablePanelById\(panelId\);/);
+  });
+
+  it('EventHandler uses the shared premium policy for the free-panel cap', () => {
+    const ehSrc = readFileSync(resolve(__dirname, '../src/app/event-handlers.ts'), 'utf-8');
+    assert.match(
+      ehSrc,
+      /if \(!hasPremiumAccess\(getAuthState\(\)\) && isFreePanelCapCounted\(panelId\)\)/,
+      'enablePanelById must honor runtime API-key access exactly as SearchManager does',
+    );
   });
 });

@@ -9,7 +9,10 @@ const syncKeys = readFileSync(new URL('../src/utils/sync-keys.ts', import.meta.u
 
 describe('free-tier ownership production wiring', () => {
   it('routes every persistent human panel toggle through the ownership helper', () => {
-    assert.match(handlers, /enablePanelById\(panelId: string\): boolean[\s\S]*?userSetPanelEnabled\(config, true\)/);
+    assert.match(
+      handlers,
+      /enablePanelById\(panelId: string, options\?: \{ trackAnalytics\?: boolean \}\): boolean[\s\S]*?userSetPanelEnabled\(config, true\)/,
+    );
     assert.match(handlers, /boundPanelCloseHandler[\s\S]*?userSetPanelEnabled\(config, false\)/);
     assert.match(handlers, /savePanelSettings:[\s\S]*?userSetPanelEnabled\(current, nextConfig\.enabled\)/);
     assert.match(settingsWindow, /userSetPanelEnabled\(config, !config\.enabled\)/);

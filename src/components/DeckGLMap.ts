@@ -6914,11 +6914,16 @@ export class DeckGLMap {
         this.debouncedFetchAircraft();
       }
     } else {
+      // Invalidate any viewport request that can still resolve after the
+      // layer is disabled. Its response must not repopulate the search source.
+      this.aircraftFetchSeq += 1;
+      this.setLayerReady('flights', false);
       if (this.aircraftFetchTimer) {
         clearInterval(this.aircraftFetchTimer);
         this.aircraftFetchTimer = null;
       }
       this.aircraftPositions = [];
+      this.onAircraftPositionsUpdate?.([]);
     }
   }
 
@@ -6939,8 +6944,12 @@ export class DeckGLMap {
     if (!this.state.layers.flights) return;
     const zoom = this.maplibreMap.getZoom();
     if (zoom < 2) {
+      // Zooming out also makes an in-flight viewport response ineligible.
+      this.aircraftFetchSeq += 1;
+      this.setLayerReady('flights', false);
       if (this.aircraftPositions.length > 0) {
         this.aircraftPositions = [];
+        this.onAircraftPositionsUpdate?.([]);
         this.render();
       }
       return;
@@ -6967,7 +6976,12 @@ export class DeckGLMap {
       this.render();
     }).catch((err) => {
       console.error('[aircraft] fetch error', err);
-      this.setLayerLoading('flights', false);
+      if (seq === this.aircraftFetchSeq) {
+        this.aircraftPositions = [];
+        this.onAircraftPositionsUpdate?.([]);
+        this.setLayerReady('flights', false);
+        this.render();
+      }
     });
   }
 
@@ -8027,6 +8041,7 @@ export class DeckGLMap {
 
   public destroy(): void {
     this.destroyed = true;
+    this.aircraftFetchSeq += 1;
     this.settleViewportMovement(false);
     this.stopTradeAnimation();
     this.activeFlightTrails.clear();
