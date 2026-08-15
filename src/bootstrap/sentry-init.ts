@@ -8,6 +8,7 @@
 
 import { isDebugBearRumScriptFrame } from './debugbear-rum';
 import { isIosLikeUserAgent } from './platform-ua';
+import { SENTRY_ALLOW_URLS } from './sentry-allow-urls';
 import { getSentryBuildMetadata } from './sentry-build-metadata';
 
 type SentryNs = typeof import('@sentry/browser');
@@ -65,10 +66,7 @@ function buildSentryInitOptions(): Parameters<SentryNs['init']>[0] {
       : location.hostname.includes('vercel.app') ? 'preview'
       : 'development',
     enabled: Boolean(sentryDsn) && !location.hostname.startsWith('localhost') && !('__TAURI_INTERNALS__' in window),
-    allowUrls: [
-      /https?:\/\/(www\.|tech\.|finance\.|commodity\.|happy\.)?worldmonitor\.app/,
-      /https?:\/\/.*\.vercel\.app/,
-    ],
+    allowUrls: SENTRY_ALLOW_URLS,
     sendDefaultPii: true,
     tracesSampleRate: 0.1,
     ignoreErrors: [
@@ -259,7 +257,7 @@ function buildSentryInitOptions(): Parameters<SentryNs['init']>[0] {
       /Can't find variable: caches/,
       /crypto\.randomUUID is not a function/,
       /ucapi is not defined/,
-      /Identifier '(?:script|reportPage|element|Shop|change_ua|originalPrompt)' has already been declared/, // change_ua: User-Agent-changer browser extension injecting same script twice — WORLDMONITOR-2D (88 events / 26 users). originalPrompt: extension hooking window.prompt double-injected — WORLDMONITOR-TE (not in our bundle; build would fail on a duplicate top-level const)
+      /Identifier '(?:script|reportPage|element|Shop|change_ua|originalPrompt|SENDER)' has already been declared/, // change_ua: User-Agent-changer browser extension injecting same script twice — WORLDMONITOR-2D (88 events / 26 users). originalPrompt: extension hooking window.prompt double-injected — WORLDMONITOR-TE. SENDER: Kaspersky-style content-script double-injection — WORLDMONITOR-ZC (not in our bundle; build would fail on a duplicate top-level const)
       /getAttribute is not a function.*getAttribute\("role"\)/,
       /SCDynimacBridge/,
       /errTimes is not defined/,
@@ -611,14 +609,44 @@ function buildSentryInitOptions(): Parameters<SentryNs['init']>[0] {
       // An empty name is admitted on the same bound as the bare name — only inside
       // the two chunks whose modules issue no fetch of their own — so it cannot
       // hide a real caller; `fetchContent` and `apiClient.fetch` still surface.
+      // The RUNTIME value of that anonymous hop is '?', not '' (WORLDMONITOR-Z6):
+      // @sentry/core stamps every parsed frame with `function || UNKNOWN_FUNCTION`
+      // — literally '?' — before beforeSend runs (node_modules/@sentry/core/
+      // build/cjs/utils/stacktrace.js:115). Sentry INGEST then displays '?' as
+      // a null function, so a replay or fixture built from API events tests ''
+      // and passes while production tests '?' and fails — which is exactly how
+      // the ''-only tolerance shipped and Z6 kept firing from builds that
+      // contained it. '' stays admitted (other SDK paths/versions may omit the
+      // stamp); both are bounded by the same fetch-free-chunk invariant.
+      // The FIFTH escape is not a build-rename at all — it is an extra frame from
+      // OUTSIDE the page. WORLDMONITOR-Z6 kept firing after the '?' tolerance
+      // shipped, carrying a stack identical to the one above plus a tab-suspender
+      // extension's `freeze-controller.js` above DebugBear's collector (the
+      // extension aborts in-flight fetches when it freezes a background tab).
+      // `nonInfraFrames` drops only `<anonymous>`, `[native code]`, and
+      // `sentry-*.js`, so an extension frame stays in the set, matches neither
+      // predicate, and one frame defeats the `.every()` — the same single-frame
+      // failure mode as the nameless hop, arriving from a different direction.
+      // An extension frame can never be OUR caller (that is precisely what the
+      // two extension gates above already assume), and this gate still requires a
+      // collector frame plus a fetch-free trampoline for every remaining frame, so
+      // admitting it cannot hide a first-party fetch — a real caller alongside the
+      // extension still surfaces, which the regression tests assert.
+      const isExtensionFrameFile = (file: string) =>
+        /^(?:chrome|moz|safari(?:-web)?)-extension:\/\//.test(file);
       const isTrampolineFrameFunction = (fn: string) =>
-        /^(?:\w{1,3}\.)?(?:window\.)?fetch$/.test(fn) || /^\w{1,2}$/.test(fn) || fn === '';
+        /^(?:\w{1,3}\.)?(?:window\.)?fetch$/.test(fn) || /^\w{1,2}$/.test(fn)
+        || fn === '' || fn === '?';
       if (/^(?:TypeError: )?Failed to fetch$/.test(msg)
           && frames.some(f => isDebugBearRumScriptFrame(f.filename ?? ''))
           && nonInfraFrames.every(f =>
             isDebugBearRumScriptFrame(f.filename ?? '')
             || (/\/assets\/(?:panel-storage|widget-store)-[A-Za-z0-9_-]+\.js/.test(f.filename ?? '')
-              && isTrampolineFrameFunction(f.function ?? '')))) {
+              && isTrampolineFrameFunction(f.function ?? ''))
+            // Kept last so the trampoline predicate stays adjacent to the chunk
+            // allowlist it is bound to — tests/debugbear-trampoline-chunks.test.mjs
+            // asserts that coupling by source locality.
+            || isExtensionFrameFile(f.filename ?? ''))) {
         return null;
       }
       // Suppress Sentry SDK DOM breadcrumb null-access on document.activeElement/contains.

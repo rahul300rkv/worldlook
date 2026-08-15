@@ -114,6 +114,12 @@ Every enabled panel beyond the immediate tier's budget. A deferred panel's slot 
 
 The project's rule for any panel that joins the grid asynchronously, in either tier: a footprint-matched placeholder shell must occupy the panel's exact grid slot from the first synchronous layout pass, and the arriving panel replaces the shell in place rather than being inserted as a new grid item. The contract's invariant is that grid geometry never changes when async content arrives — violations register as layout shifts for every panel below the insertion point. Reserving the slot and starting the load early are independent decisions; conflating "loads immediately" with "needs no reservation" is the failure mode that produced the dashboard's dominant desktop layout-shift mechanism. See also: Immediate Tier, Deferred Tier, Shift Mover.
 
+### Late-Mount Window
+
+The interval between a Deferred Tier panel being constructed and its element entering the grid — routinely minutes on a phone, since the panel is built only as its shell nears the viewport while the boot data pass finished long before. Two things cross the window in opposite directions and both need somewhere to wait: data *pushed* to a panel that does not exist yet, and a render *emitted* by a panel whose element is not attached yet.
+
+The project's rule is that neither may be discarded. A push aimed at an absent panel is queued and replayed when the panel loads; a render emitted before attachment is deferred and flushed when the element joins the grid. Both failure modes read as defensive code and are silent — no error, no failed request, no telemetry — so they surface only as a panel that shows its initial placeholder for the whole session. The attachment check is the subtler of the two, because it is genuinely correct *after* attachment (a torn-down panel must not paint) and wrong *before* it; only checking ahead of the work distinguishes "never attached yet" from "detached again". See also: Deferred Tier, Deferred-Shell Contract, Viewport Prime.
+
 ### Viewport Prime
 
 The dashboard's demand-driven data pass: on boot, and again on every scroll and resize, it loads data for exactly the panels near the viewport, so a Deferred Tier panel receives its content only as the user approaches it. It re-runs constantly by design, which makes its safety contract the load-bearing part: the pass dedupes *concurrent* loads but does not remember *completed* ones, so every loader it can reach must be cheap to repeat — served from a real cache, or skipped outright when the panel already renders data. A loader that repeats expensively (an uncached network call, a teardown of already-rendered content) turns every scroll into user-visible churn.
@@ -179,6 +185,12 @@ A deterministic check that a value reported by a model-based extractor actually 
 ### Closed-World Gate
 
 A completeness check structured so the universe it covers is mechanically enumerated from the source of truth and every member must be classified — required (mechanically asserted at every consumer) or excluded with a recorded reason — so an unclassified member fails the gate at the moment it is introduced. The inverse of an opt-in allowlist, which can only catch what someone remembered to add and therefore rots silently as the universe grows; a closed world converts each new member into a forced, recorded decision, and the classification record doubles as a decision log distinguishing deliberately-absent from forgotten. Both halves need their own vacuous-pass protection: an enumerator that finds zero members, or an extractor that finds zero consumers, must fail rather than skip. See also: Vacuous Guard, Mutation Proof.
+
+### Ratchet Inventory
+
+A counted census of a known-bad idiom's remaining occurrences, recorded per (file, idiom) pair with an occurrence count, which the guard enforces in *both* directions: a higher count or an unrecorded pair fails as new drift, a lower count fails as a stale record that must be updated. The bidirectionality is what separates it from an allowlist — a plain permission list cannot see a second occurrence added to a file it already forgives, which is the highest-traffic regression shape there is, because new code lands in the files that already carry the pattern. Counts must be measured on normalised source (comment-stripped, at minimum), or a mention of the idiom in prose keeps an entry alive after its last real call is gone and the stale check never asks anyone to delete it.
+
+Two properties are routinely misread. An entry is a *record*, not a permission slip: it says this many occurrences are known and tracked, never that they are sanctioned. And a shrinking entry does not imply zero is the destination — some populations have a floor, where the surviving occurrence is the one that must *not* be migrated, so its count is terminal rather than unfinished. A ratchet cannot distinguish "this count moved" from "this count moved for the wrong reason", so wherever a floor exists it has to be stated in the inventory *and* in the guard's own failure text, which is the only prose the person driving the count to zero will actually read. The behavioural rule underneath the floor needs a separate test; the ratchet enforces the census, not the reason. See also: Closed-World Gate, Vacuous Guard, Mutation Proof.
 
 ## News Story Tracking & Trend Detection
 
@@ -515,6 +527,75 @@ source failed" are four different claims that would otherwise all appear as a
 missing number, and they justify very different scores. A country nobody
 surveys must not be scored like a country where the thing being measured
 verifiably does not happen.
+
+## Seed Bundle Orchestration
+
+### Bundle Wall Budget
+
+The total wall-clock time one bundle tick may occupy, chosen to sit below the
+container's hard kill so a member is shed cleanly instead of being killed
+mid-publish.
+
+The budget only shapes anything while it stays under that kill; at or above it
+the container dies first and the budget is decorative. Every member must fit the
+budget outright — a member whose worst case cannot fit is not under pressure, it
+can never run at all, which is a configuration error rather than load.
+
+### Section Worst Case
+
+The longest wall-clock a member can occupy: its own timeout plus the grace the
+runner allows between asking a child to stop and forcing it.
+
+Distinct from expected runtime, which is usually far smaller. Admission is
+decided on the worst case, so an over-declared timeout costs the bundle budget
+the member will never actually spend.
+
+### Admission Headroom
+
+Slack reserved above a member's worst case to cover the work the runner itself
+performs before it admits anything.
+
+Load-bearing rather than defensive: the runner's freshness checks run before the
+budget test, so the budget is already partly spent when the first member is
+considered. Deriving this from the runner's own per-check bound, rather than
+choosing a number, is what keeps the admission rule and the runtime rule from
+drifting apart — when they drift, the admission rule accepts a band of
+configurations the runtime rejects on every tick.
+
+### Section Deferral
+
+A due member skipped for lack of remaining budget on this tick, expected to run
+on a later one.
+
+Deferral is load-shedding, not failure — but it only pays for itself if the
+member eventually runs. A member deferred on every tick is a stall wearing
+deferral's clothing, and telling those two apart is the whole reason this
+vocabulary exists.
+
+### Graceful Skip
+
+A member that hit a transient upstream failure, extended its last-good data
+instead of publishing, and lost nothing.
+
+It must not crash the bundle: one rate-limited source firing a deploy-crash
+alert is the alert fatigue that makes the alarm worthless. Real staleness is
+caught by freshness monitoring on the published data, never by the tick's exit
+status.
+
+### Starved Tick
+
+A tick that completed no member while deferring due work — it published nothing
+and shed work at the same time.
+
+Indistinguishable from a healthy no-op by exit status alone, which is why it is
+named and reported explicitly. A tick where every member was merely fresh is a
+healthy no-op and must not be confused with it.
+
+## Market Data Claims
+
+### Tape Claim
+
+The label a market surface is allowed to show for a quote, bar, or stream: unconfigured, delayed, end-of-day, historical, stale, or — only after a separate commercial display/rebroadcast confirmation — licensed live. A configured provider key is not a Tape Claim. `Panel.setDataBadge('live')` means a fresh fetch versus a cache hit, not a licensed tape. Yahoo and seeded Finnhub quotes in this product stay delayed or end-of-day even when their keys exist. See also: Entitlement.
 
 ## Flagged ambiguities
 

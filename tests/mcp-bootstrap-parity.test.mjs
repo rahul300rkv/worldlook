@@ -70,6 +70,9 @@ const EXCLUDED_FROM_MCP = new Map([
   ['economic:fred:batch:v1',
     'operational: producer batch envelope written by seed-fred-rates for health and rollout validation; the individual FRED series are the queryable data surfaces, so the batch envelope is intentionally not exposed through MCP.'],
 
+  ['infra:ontario-511:v1',
+    'dashboard-internal: Ontario 511 records feed the canadaRoads map layer (#6608); not a queryable MCP slice.'],
+
   // ===========================================================================
   // Intermediate / pipeline keys (data surfaces through a sibling tool)
   // ===========================================================================
@@ -143,7 +146,7 @@ const EXCLUDED_FROM_MCP = new Map([
     'on-demand: RPC cache for military bases — deferred to a future expanded military tool.'],
   ['news:threat:summary:v1',
     'on-demand: relay-classify-only, written only when classify produces country matches (matches api/health.js:468 ON_DEMAND_KEYS rationale). Underlying news inputs already exposed via get_news_intelligence.'],
-  ['resilience:ranking:v27',
+  ['resilience:ranking:v28',
     'on-demand: RPC cache populated after Pro ranking requests (matches api/health.js:469 ON_DEMAND_KEYS rationale). Deferred to a future resilience tool.'],
   ['forecast:simulation-package:latest',
     'on-demand: written by writeSimulationPackage after deep forecast runs (matches api/health.js:466 ON_DEMAND_KEYS rationale). Internal pipeline artifact, not a queryable slice.'],
@@ -223,11 +226,11 @@ const EXCLUDED_FROM_MCP = new Map([
   ['supply_chain:hormuz_tracker:v1',
     'deferred: specialized Strait-of-Hormuz tracker; broader chokepoint coverage via get_chokepoint_status. Hormuz-specific tool deferred.'],
   ['resilience:static:index:v1',
-    'deferred to a future resilience tool (paired with resilience:ranking:v27).'],
+    'deferred to a future resilience tool (paired with resilience:ranking:v28).'],
   ['resilience:static:fao',
     'deferred to a future resilience tool (FAO Phase 3+ aggregate, paired with resilience:static:index:v1).'],
-  ['resilience:intervals:v10:US',
-    'deferred to a future resilience tool (formula-tagged sensitivity bands on top of resilience:ranking:v27).'],
+  ['resilience:intervals:v11:US',
+    'deferred to a future resilience tool (formula-tagged sensitivity bands on top of resilience:ranking:v28).'],
   ['resilience:low-carbon-generation:v1',
     'deferred to a future resilience tool. Companion data to fossil-electricity-share (already exposed via get_energy_intelligence).'],
   ['resilience:power-losses:v1',
@@ -370,6 +373,8 @@ const EXCLUDED_FROM_MCP = new Map([
     'operational: relay loop heartbeat — covered by /api/health, not a user-facing data slice for MCP.'],
   ['relay:heartbeat:climate-news',
     'operational: relay loop heartbeat — covered by /api/health, not a user-facing data slice for MCP.'],
+  ['bundle:heartbeat:static-ref',
+    'operational: seed-bundle-static-ref tick-execution heartbeat — covered by /api/health, not a user-facing data slice for MCP (#6691).'],
   ['digest:last-run',
     'operational: digest-notifications cron heartbeat — covered by /api/health, not a user-facing data slice for MCP.'],
   ['intel-history:ingest-health:conflict:acled-intel:v1',
