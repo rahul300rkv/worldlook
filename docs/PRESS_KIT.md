@@ -116,8 +116,9 @@ World Monitor aggregates publicly available data from dozens of sources. No prop
 | News feeds monitored | 500+ |
 | Live video streams | 8 |
 | Data layers on map | 56 layer types |
+| Panel implementations | 109 concrete classes |
 | Countries monitored | 200+ |
-| Languages supported | 26 (including RTL) |
+| Languages supported | 27 (including RTL) |
 | Military bases mapped | 220+ |
 | AI datacenters mapped | 111 |
 | Stock exchanges mapped | 29 |
@@ -179,7 +180,7 @@ High (66-80), Critical (81-100). The full public methodology is
 ### Country Resilience Index (CRI)
 
 The Country Resilience Index scores the 196-country public rankable universe
-from 0 to 100 across 6 domains, 20 active dimensions, and 3 pillars. It uses
+from 0 to 100 across 72 indicators, 21 active dimensions, 6 domains, and 3 pillars. It uses
 official and authoritative sources, transparent goalposts, coverage tracking,
 and imputation taxonomy so analysts can see how much of each score is observed
 versus imputed. CRI complements CII: CII measures near-term stress; CRI measures
@@ -212,7 +213,7 @@ The system identifies emerging crises by blending news clustering, geographic co
 - **Desktop**: Native apps for macOS, Windows, and Linux (via Tauri)
 - **PWA**: Installable as a progressive web app with offline map tile caching
 - **Mobile**: Mobile-optimized responsive layout with touch gestures
-- **Languages**: 24 languages including Arabic (RTL), Chinese, Japanese, Korean, Hindi, and major European languages
+- **Languages**: 27 languages including Arabic (RTL), Chinese, Japanese, Korean, Hindi, Persian, Swahili, and major European languages
 
 ---
 

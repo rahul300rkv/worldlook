@@ -120,6 +120,23 @@ describe('ignoreErrors filters', () => {
       'Generic first-party load-failure messages must NOT be ignored',
     );
   });
+
+  // WORLDMONITOR-ZC: Kaspersky-style content script double-injected, redeclaring
+  // its own top-level `SENDER` const. Cannot come from our bundle — esbuild fails
+  // the build on a duplicate top-level declaration.
+  it('suppresses the extension double-injection SENDER redeclaration', () => {
+    assert.ok(
+      isIgnored("Identifier 'SENDER' has already been declared"),
+      'SENDER duplicate-declaration must be ignored',
+    );
+  });
+
+  it('does NOT suppress a duplicate-declaration for an unlisted identifier', () => {
+    assert.ok(
+      !isIgnored("Identifier 'mapLayers' has already been declared"),
+      'Only the enumerated extension identifiers may be ignored',
+    );
+  });
 });
 
 // ─── P2: firstPartyFile regex covers all Vite chunk patterns ─────────────
@@ -1464,6 +1481,154 @@ describe('sentry beforeSend — Y4 bare minified trampoline hop', () => {
       { filename: '/assets/panel-storage-91sIzezL.js', lineno: 2, function: 't' },
     ]);
     assert.ok(beforeSend(event) !== null, 'no collector frame means no trampoline explanation');
+  });
+});
+
+// ─── WORLDMONITOR-Y4 recurrence: ANONYMOUS trampoline hop ─────────────────────
+//
+// Fourth build-rename of the same VC/VQ/Y4 wrapper. The 2026-08-04 fix admitted
+// a bare minified hop (`t`), and every Y4 event before that deploy is suppressed
+// by it. Every event AFTER it still surfaced (14/14, 2026-08-12..13), each one
+// blocked by a single `panel-storage-*.js` frame Sentry recorded with NO
+// function name at all: a later Vite build emitted that hop anonymously.
+// `isTrampolineFrameFunction('')` was false, so one nameless frame defeated the
+// `.every()` and the whole class re-surfaced.
+//
+// Admitting '' is bounded by exactly the argument that already licenses the
+// bare-name tolerance: neither module backing these two chunks issues a fetch of
+// its own (tests/debugbear-trampoline-chunks.test.mjs fails if either ever
+// gains one), so a frame in them cannot be the real caller whether or not the
+// minifier kept a name for it. The chunk allowlist and the required collector
+// frame remain the load-bearing halves — the safety tests below pin both.
+describe('sentry beforeSend — Y4 anonymous trampoline hop', () => {
+  // Verbatim from event 2026-08-13T05:18:41Z (28/28 Y4 events carry a DebugBear frame).
+  const y4AnonStack = [
+    { filename: '/lpMwA9KpC6pf.js', lineno: 8, function: null },
+    { filename: '/lpMwA9KpC6pf.js', lineno: 1, function: null },
+    { filename: '/lpMwA9KpC6pf.js', lineno: 8, function: null },
+    { filename: '/lpMwA9KpC6pf.js', lineno: 1, function: null },
+    { filename: '/lpMwA9KpC6pf.js', lineno: 1, function: 't' },
+    { filename: '/assets/widget-store-CdO-mBNc.js', lineno: 2, function: 'Cn.window.fetch' },
+    { filename: '/assets/panel-storage-D-2Xh2lU.js', lineno: 2, function: null },
+    { filename: '/assets/panel-storage-D-2Xh2lU.js', lineno: 2, function: 'c' },
+  ];
+
+  it('suppresses the exact Y4 recurrence stack (anonymous hop)', () => {
+    assert.equal(beforeSend(makeEvent('Failed to fetch', 'TypeError', y4AnonStack)), null,
+      'an anonymous hop is the same DebugBear wrapper class as VC/VQ/Y4');
+  });
+
+  it('does NOT suppress an anonymous frame in a NON-allowlisted chunk', () => {
+    // The chunk allowlist is what stops '' from becoming a blanket bypass: any
+    // first-party module CAN emit an anonymous frame, and most of them do fetch.
+    const event = makeEvent('Failed to fetch', 'TypeError', [
+      { filename: '/lpMwA9KpC6pf.js', lineno: 1, function: 't' },
+      { filename: '/assets/runtime-BQi6MP9w.js', lineno: 2, function: null },
+    ]);
+    assert.ok(beforeSend(event) !== null,
+      'an anonymous frame outside the two fetch-free chunks is a real caller');
+  });
+
+  it('does NOT suppress an anonymous trampoline frame without a DebugBear frame', () => {
+    const event = makeEvent('Failed to fetch', 'TypeError', [
+      { filename: '/assets/panel-storage-D-2Xh2lU.js', lineno: 2, function: null },
+    ]);
+    assert.ok(beforeSend(event) !== null, 'no collector frame means no trampoline explanation');
+  });
+
+  // ── The RUNTIME shape of the anonymous hop: '?', not '' ─────────────────────
+  //
+  // The '' tolerance above was derived from Sentry's INGEST representation
+  // (anonymous frames display as function: null in the API), and the fixture
+  // built from it passed while production kept firing (WORLDMONITOR-Z6,
+  // build_shas at and after the fix's own merge commit). The SDK never hands
+  // beforeSend an empty name: @sentry/core stamps every parsed frame with
+  // `function: frame.function || UNKNOWN_FUNCTION` where UNKNOWN_FUNCTION is
+  // '?' (node_modules/@sentry/core/build/cjs/utils/stacktrace.js:115). So at
+  // runtime the anonymous hop is '?' — not \w, not '' — and the '' branch is
+  // dead code for this SDK version. These fixtures pin the true runtime shape;
+  // the null-shaped fixture above stays as the ingest-replay shape.
+  const y4RuntimeStack = [
+    { filename: '/lpMwA9KpC6pf.js', lineno: 8, function: '?' },
+    { filename: '/lpMwA9KpC6pf.js', lineno: 1, function: '?' },
+    { filename: '/lpMwA9KpC6pf.js', lineno: 8, function: '?' },
+    { filename: '/lpMwA9KpC6pf.js', lineno: 1, function: '?' },
+    { filename: '/lpMwA9KpC6pf.js', lineno: 1, function: 't' },
+    { filename: '/assets/widget-store-CxHYoOTa.js', lineno: 2, function: 'Cn.window.fetch' },
+    { filename: '/assets/panel-storage-Cz30-usJ.js', lineno: 2, function: '?' },
+    { filename: '/assets/panel-storage-Cz30-usJ.js', lineno: 2, function: 'c' },
+  ];
+
+  it("suppresses the runtime shape of the anonymous hop (SDK UNKNOWN_FUNCTION '?')", () => {
+    assert.equal(beforeSend(makeEvent('Failed to fetch', 'TypeError', y4RuntimeStack)), null,
+      "the SDK stamps anonymous frames as '?', which is what beforeSend actually receives");
+  });
+
+  it("does NOT suppress a '?' frame in a NON-allowlisted chunk", () => {
+    const event = makeEvent('Failed to fetch', 'TypeError', [
+      { filename: '/lpMwA9KpC6pf.js', lineno: 1, function: 't' },
+      { filename: '/assets/runtime-BQi6MP9w.js', lineno: 2, function: '?' },
+    ]);
+    assert.ok(beforeSend(event) !== null,
+      "a '?' frame outside the two fetch-free chunks is a real caller");
+  });
+
+  it("does NOT suppress a '?' trampoline frame without a DebugBear frame", () => {
+    const event = makeEvent('Failed to fetch', 'TypeError', [
+      { filename: '/assets/panel-storage-Cz30-usJ.js', lineno: 2, function: '?' },
+    ]);
+    assert.ok(beforeSend(event) !== null, 'no collector frame means no trampoline explanation');
+  });
+
+  // ── A browser-extension frame riding the same wrapper ───────────────────────
+  //
+  // WORLDMONITOR-Z6 kept firing after the '?' fix with a stack identical to
+  // y4RuntimeStack except for ONE extra frame: a tab-suspender extension's
+  // freeze-controller.js sitting above DebugBear's collector. `nonInfraFrames`
+  // drops only <anonymous>, [native code], and sentry-*.js, so the extension
+  // frame stays in the set, matches neither the collector predicate nor the
+  // trampoline predicate, and a single frame defeats the `.every()` — the same
+  // failure mode as the nameless hop before it, from a different direction.
+  //
+  // An extension frame can never be OUR caller, and the surrounding gate still
+  // demands a DebugBear collector frame plus fetch-free trampolines for every
+  // remaining frame, so admitting it cannot hide a first-party fetch.
+  const z6ExtensionStack = [
+    { filename: 'chrome-extension://nbgpkmdjdopfhiibdminmpbpmnppcjgm/freeze-controller.js', lineno: 279, function: '?' },
+    ...y4RuntimeStack,
+  ];
+
+  it('suppresses the exact Z6 stack (extension frame above the DebugBear wrapper)', () => {
+    assert.equal(beforeSend(makeEvent('Failed to fetch', 'TypeError', z6ExtensionStack)), null,
+      'a tab-suspender extension aborting a DebugBear-wrapped fetch is not our bug');
+  });
+
+  it('suppresses the moz-extension variant of the same shape', () => {
+    const event = makeEvent('Failed to fetch', 'TypeError', [
+      { filename: 'moz-extension://a1b2c3/freeze-controller.js', lineno: 279, function: '?' },
+      ...y4RuntimeStack,
+    ]);
+    assert.equal(beforeSend(event), null, 'the extension family is not Chrome-specific');
+  });
+
+  it('does NOT suppress an extension frame without a DebugBear collector', () => {
+    // The collector frame is what explains the trampolines; without it an
+    // extension frame alone must not buy suppression of a first-party fetch.
+    const event = makeEvent('Failed to fetch', 'TypeError', [
+      { filename: 'chrome-extension://nbgpkmdjdopfhiibdminmpbpmnppcjgm/freeze-controller.js', lineno: 279, function: '?' },
+      { filename: '/assets/panels-DzUv7BBV.js', lineno: 100, function: 'loadCountryGeometry' },
+    ]);
+    assert.ok(beforeSend(event) !== null, 'a genuine first-party caller must still surface');
+  });
+
+  it('does NOT suppress an extension stack that also carries a real first-party caller', () => {
+    const event = makeEvent('Failed to fetch', 'TypeError', [
+      { filename: 'chrome-extension://nbgpkmdjdopfhiibdminmpbpmnppcjgm/freeze-controller.js', lineno: 279, function: '?' },
+      ...y4RuntimeStack,
+      { filename: '/assets/panels-DzUv7BBV.js', lineno: 100, function: 'loadCountryGeometry' },
+    ]);
+    assert.ok(beforeSend(event) !== null,
+      'the extension tolerance must not swallow a named first-party fetch caller');
   });
 });
 

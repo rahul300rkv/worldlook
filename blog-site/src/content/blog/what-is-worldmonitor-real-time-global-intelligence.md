@@ -24,7 +24,7 @@ World Monitor turns many public signals into one situational-awareness view. Ins
 | Natural hazards | Earthquakes, fires, volcanoes, floods, weather, and radiation signals | [USGS](https://earthquake.usgs.gov/), [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/), and official alert feeds |
 | Cyber and infrastructure | Outages, malicious infrastructure, datacenters, nuclear sites, and dependency cascades | Cloudflare Radar, abuse.ch feeds, and public infrastructure datasets |
 
-The [data-source catalog](https://www.worldmonitor.app/docs/data-sources) documents provider, cadence, license posture, and provenance details for 536+ observed upstream hosts. A source being present does not make every observation equally fresh or authoritative; each feed retains its own reporting delay and revision policy.
+The [data-source catalog](https://www.worldmonitor.app/docs/data-sources) documents provider, cadence, license posture, and provenance details for 547+ observed upstream hosts. A source being present does not make every observation equally fresh or authoritative; each feed retains its own reporting delay and revision policy.
 
 ## How Is It Different From a News Dashboard?
 
@@ -34,14 +34,14 @@ That correlation layer is the product's central idea: separate weak signals beco
 
 ## What Is Included in the Free Dashboard?
 
-The public dashboard exposes 56 map-layer types, 500+ curated news feeds backed by 536+ observed upstream hosts, country briefs, instability scores, chokepoints, infrastructure, markets, disasters, and watchlists. Every layer except the Resilience layer is available on the free plan, and the dashboard can be opened without an account.
+The public dashboard exposes 56 map-layer types, 500+ curated news feeds backed by 547+ observed upstream hosts, country briefs, instability scores, chokepoints, infrastructure, markets, disasters, and watchlists. Every layer except the Resilience layer is available on the free plan, and the dashboard can be opened without an account.
 
 World Monitor currently maintains:
 
 - **31 Tier-1 countries** in the high-frequency Country Instability Index
 - A **196-country** public Country Resilience Index universe
 - **29 stock exchanges** and **14 central-bank or supranational institutions** in the generated market catalog
-- **26 interface languages**, including right-to-left Arabic
+- **28 interface languages**, including right-to-left Arabic
 - **Six dashboard variants**: World, Tech, Finance, Commodity, Happy, and Energy Monitor
 
 These counts are generated from the repository rather than estimated in editorial copy. The current plans, limits, and capability summary are also published in [machine-readable pricing](https://www.worldmonitor.app/pricing.md).
@@ -50,7 +50,7 @@ These counts are generated from the repository rather than estimated in editoria
 
 The **Country Instability Index (CII)** is a high-frequency 0–100 score for 31 Tier-1 countries. It blends a curated editorial baseline with live event pressure from unrest, conflict, security, and information signals, and publishes a signed 24-hour movement delta. It is a triage signal, not a probability or a substitute for source review.
 
-The **Country Resilience Index (CRI)** measures a different question: how well a country can absorb and recover from shocks. It covers a fixed 196-country rankable universe across six weighted domains and 20 active dimensions, with coverage and imputation provenance exposed alongside the score. Read the [CII methodology](https://www.worldmonitor.app/docs/country-instability-index) and [CRI methodology](https://www.worldmonitor.app/docs/methodology/country-resilience-index) before using either index in a decision workflow.
+The **Country Resilience Index (CRI)** measures a different question: how well a country can absorb and recover from shocks. It covers 72 indicators across 21 active dimensions and six weighted domains for a fixed 196-country rankable universe, with coverage and imputation provenance exposed alongside the score. Read the [CII methodology](https://www.worldmonitor.app/docs/country-instability-index) and [CRI methodology](https://www.worldmonitor.app/docs/methodology/country-resilience-index) before using either index in a decision workflow.
 
 ## Who Uses World Monitor?
 

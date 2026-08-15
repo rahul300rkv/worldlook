@@ -17,7 +17,7 @@
   },
   "variantCount": 6,
   "componentTopLevelTsFiles": 186,
-  "serviceTopLevelEntries": 233,
+  "serviceTopLevelEntries": 234,
   "apiEndpointEntries": 91,
   "panelClasses": 109,
   "protoFiles": 298,
@@ -47,13 +47,15 @@
     "ro",
     "ru",
     "sv",
+    "sw",
     "th",
     "tr",
     "uk",
     "vi",
-    "zh"
+    "zh",
+    "zh-TW"
   ],
-  "locales": 26,
+  "locales": 28,
   "workflows": [
     "analytics-collector-monitor.yml",
     "build-desktop.yml",
@@ -63,6 +65,7 @@
     "deploy-gate.yml",
     "deploy-railway-reconcile-control.yml",
     "deploy-worker.yml",
+    "desktop-release-train.yml",
     "docker-publish.yml",
     "feed-validation.yml",
     "indexnow-submit.yml",
@@ -78,6 +81,7 @@
     "publish-go.yml",
     "publish-python.yml",
     "publish-ruby.yml",
+    "railway-deploy-drift.yml",
     "railway-deploy-trigger-watchdog.yml",
     "railway-deploy-trigger.yml",
     "railway-reconcile-manual-recovery.yml",
@@ -88,20 +92,20 @@
     "typecheck.yml",
     "umami-storage-monitor.yml"
   ],
-  "workflowCount": 32,
+  "workflowCount": 34,
   "freshnessSources": 35,
   "freshnessRequiredForRisk": 2,
-  "feedDefinitions": 632,
+  "feedDefinitions": 658,
   "sourceAttribution": {
-    "activeHosts": 536,
+    "activeHosts": 547,
     "structuredHosts": 296,
-    "feedHosts": 268,
+    "feedHosts": 279,
     "operationalStatusHosts": 30,
-    "providerCount": 534,
-    "observedHosts": 655,
+    "providerCount": 545,
+    "observedHosts": 666,
     "reviewNeeded": 518
   },
-  "sourceAttributionHosts": 536,
+  "sourceAttributionHosts": 547,
   "airportCount": 115,
   "stockExchangeCount": 29,
   "centralBankInstitutionCount": 14,
@@ -304,7 +308,7 @@
   },
   "healthProbedKeys": {
     "bootstrap": 109,
-    "standalone": 153,
-    "total": 262
+    "standalone": 154,
+    "total": 263
   }
 }
