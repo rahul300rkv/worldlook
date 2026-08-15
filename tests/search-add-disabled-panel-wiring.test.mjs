@@ -20,6 +20,10 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const searchModalSrc = readFileSync(resolve(__dirname, '../src/components/SearchModal.ts'), 'utf-8');
 const searchManagerSrc = readFileSync(resolve(__dirname, '../src/app/search-manager.ts'), 'utf-8');
+const searchSelectionSrc = readFileSync(
+  resolve(__dirname, '../src/app/search-selection-dispatcher.ts'),
+  'utf-8',
+);
 const appSrc = readFileSync(resolve(__dirname, '../src/App.ts'), 'utf-8');
 
 describe('CMD+K add-disabled-panel discoverability wiring', () => {
@@ -45,17 +49,17 @@ describe('CMD+K add-disabled-panel discoverability wiring', () => {
     assert.match(searchModalSrc, /command-addable/, 'missing the Add-affordance CSS hook');
   });
 
-  it('SearchManager feeds the available set and enables-then-scrolls on select', () => {
+  it('SearchManager feeds the available set and its dispatcher enables-then-scrolls on select', () => {
     assert.match(searchManagerSrc, /setAvailablePanels\(/, 'SearchManager must publish the available-panels superset');
     // The panel command handler must enable a disabled panel before scrolling.
     // (`action` is parsed into `panelId` + optional `@tab` deep-link suffix.)
     assert.match(
-      searchManagerSrc,
-      /enablePanel\(panelId,\s*\{[\s\S]*?trackDetailedAnalytics(?:\s*:|\s*[,}])/,
+      searchSelectionSrc,
+      /enablePanel\(panelId,\s*\{\s*trackDetailedAnalytics\s*\}\)/,
       'panel command handler must enable a disabled panel through the shared callback',
     );
     assert.match(
-      searchManagerSrc,
+      searchSelectionSrc,
       /scrollToPanel(?:WhenReady)?\(panelId/,
       'panel command handler must still scroll to the panel',
     );
